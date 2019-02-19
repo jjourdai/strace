@@ -19,6 +19,8 @@
 # include <stdio.h>
 # include <stdarg.h>
 # include <fcntl.h>
+# include <sys/wait.h> 
+# include <sys/stat.h> 
 
 # define COUNT_OF(ptr) (sizeof(ptr) / sizeof((ptr)[0]))
 # define USAGE "[-hoc]\n"
