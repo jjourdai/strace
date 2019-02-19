@@ -47,6 +47,16 @@ char	*search_binary_in_path(char *binary_name)
 	}
 }
 
+char 	*local_binary(char *bin_name)
+{
+	char	buf[PATH_MAX + 1];
+	char	*concat;
+
+	getcwd(buf, PATH_MAX);	
+	asprintf(&concat, "%s/%s", buf, bin_name);
+	return (concat);
+}
+
 int	main(int argc, char **argv, char **environ)
 {
 	get_options(argc, argv);
@@ -57,10 +67,12 @@ int	main(int argc, char **argv, char **environ)
 	process = fork();
 	if (process == 0) {
 		char *bin;
-		if (env.params[0][0] != '/')
-			bin = search_binary_in_path(env.params[0]);
-		else
+		if (ft_strncmp(env.params[0], "./", 2) == 0) /* local path */
+			bin = local_binary(env.params[0]);
+		else if (env.params[0][0] == '/')		 /* obsolut path */
 			bin = env.params[0];	
+		else 									/* relative path */ 
+			bin = search_binary_in_path(env.params[0]);
 		__ASSERTI(-1, execve(bin, env.params, environ), "execve ");
 	} else {
 		waitpid(process, &child_st, WUNTRACED);
