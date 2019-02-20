@@ -15,6 +15,7 @@ SRC_PATH = ./src/
 SRC_NAME =	main.c \
 			param.c \
 			err.c \
+			syscall.c \
 
 OBJ_PATH = ./.obj/
 

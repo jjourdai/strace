@@ -21,6 +21,11 @@
 # include <fcntl.h>
 # include <sys/wait.h> 
 # include <sys/stat.h> 
+# include <sys/ptrace.h> 
+# include <sys/user.h> 
+# include <sys/syscall.h> 
+# include <sys/reg.h> 
+# include <linux/elf.h>
 
 # define COUNT_OF(ptr) (sizeof(ptr) / sizeof((ptr)[0]))
 # define USAGE "[-hoc]\n"

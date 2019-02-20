@@ -34,7 +34,9 @@ char	*search_binary_in_path(char *binary_name)
 		return (concat);
 	} else {
 		path = strdup(path);
-		concat = ft_memalloc(strlen(path) + 1 + strlen(binary_name));
+		if ((concat = ft_memalloc(strlen(path) + 1 + strlen(binary_name))) == NULL) {
+			fprintf(stderr, "Malloc failure\n"); exit(EXIT_FAILURE);
+		}
 		do
 		{
 			test = get_next_path(path);
@@ -57,6 +59,33 @@ char 	*local_binary(char *bin_name)
 	return (concat);
 }
 
+char *get_string(pid_t process, uint64_t reg)
+{
+	uint64_t	size = 4096;
+	uint32_t	index = 0;
+	uint32_t	value;
+	char		*ptr;
+
+	if ((ptr = ft_memalloc(size)) == NULL) {
+		fprintf(stderr, "Malloc failure\n"); exit(EXIT_FAILURE);
+	}
+	for (;;)
+	{
+		value = __ASSERTI(-1, ptrace(PTRACE_PEEKDATA, process, reg + index, NULL), "ptrace ");
+		memcpy(ptr + index, &value, sizeof(value));
+		index += 4;
+		if (value == 0)
+			return (ptr);
+		if (index >= size) {
+			size *= 2;
+			ptr = realloc(ptr, size);
+		}
+	}
+}
+
+
+extern const char *syscalls[];
+
 int	main(int argc, char **argv, char **environ)
 {
 	get_options(argc, argv);
@@ -67,15 +96,40 @@ int	main(int argc, char **argv, char **environ)
 	process = fork();
 	if (process == 0) {
 		char *bin;
-		if (ft_strncmp(env.params[0], "./", 2) == 0) /* local path */
+		if (ft_strncmp(env.params[0], "./", 2) == 0) 	/* local path */
 			bin = local_binary(env.params[0]);
-		else if (env.params[0][0] == '/')		 /* obsolut path */
-			bin = env.params[0];	
-		else 									/* relative path */ 
+		else if (env.params[0][0] == '/')				/* obsolut path */
+			bin = env.params[0];
+		else 											/* relative path */ 
 			bin = search_binary_in_path(env.params[0]);
 		__ASSERTI(-1, execve(bin, env.params, environ), "execve ");
 	} else {
-		waitpid(process, &child_st, WUNTRACED);
+		struct user_regs_struct regs;
+		
+		__ASSERTI(-1, ptrace(PTRACE_SEIZE, process, NULL, NULL), "ptrace ");
+		__ASSERTI(-1, ptrace(PTRACE_INTERRUPT, process, NULL, NULL), "ptrace ");
+
+		wait(&child_st);
+		t_bool entry = FALSE;
+		while (1)
+		{
+			__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, &regs), "ptrace ");
+			if (entry == FALSE) {
+				printf("%s() = %d\n", syscalls[regs.orig_rax], regs.rax);
+				entry = TRUE;
+			} else {
+				if (regs.orig_rax == SYS_write) {
+					printf("%d\n", regs.rdi);
+					printf("%d\n", regs.rdx);
+					//printf("%s\n", regs.rsi);
+				}
+				entry = FALSE;
+			}
+			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
+			waitpid(process, &child_st, WUNTRACED);
+			if (WIFEXITED(child_st))
+				break ;
+		}
 	}
 	return (EXIT_SUCCESS);
 }
