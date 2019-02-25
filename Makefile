@@ -16,6 +16,7 @@ SRC_NAME =	main.c \
 			param.c \
 			err.c \
 			syscall.c \
+			macro_errno.c \
 
 OBJ_PATH = ./.obj/
 

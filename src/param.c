@@ -28,13 +28,14 @@ static void	open_output_file(char *str, void *ptr)
 	int fd;
 
 	fd = __ASSERTI(-1, open(str, O_CREAT | O_TRUNC | O_WRONLY, 0644), "open");
-	__ASSERTI(-1, dup2(fd, STDOUT_FILENO), "dup2");
+	*((int*)ptr) = fd;
+	//__ASSERTI(-1, dup2(fd, STDOUT_FILENO), "dup2");
 }
 
 static struct params_getter options[] = {
 	{"help", 'h', F_HELP, NULL, NULL, DUP_OFF},
 	{"ccccc", 'c', F_C, NULL, NULL, DUP_OFF},
-	{"output", 'o', F_OUTPUT, open_output_file, NULL, DUP_OFF},
+	{"output", 'o', F_OUTPUT, open_output_file, &env.flag.fd, DUP_OFF},
 };
 
 void	longname_opt(char **argv, uint32_t *flag, int *i)

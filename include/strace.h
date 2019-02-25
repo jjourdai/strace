@@ -46,6 +46,11 @@
 # define __ASSERTI(ERR_VALUE, RETURN_VALUE, STRING) x_int(ERR_VALUE, RETURN_VALUE, STRING, __FILE__, __LINE__)
 # define __ASSERT(ERR_VALUE, RETURN_VALUE, STRING) x_void(ERR_VALUE, RETURN_VALUE, STRING, __FILE__, __LINE__)
 
+# define SYSCALL_ENTRY 1
+# define SYSCALL_EXIT 0
+# define SYSCALL_OFF -1
+# define END 1
+
 enum	options {
 	F_HELP = (1 << 0),
 	F_C = (1 << 1),
@@ -62,10 +67,27 @@ enum	error {
 	USAGE_ERR,
 };
 
+enum	parameters_type {
+	INT = 1,
+	PTR,
+	LONG,
+	STR,
+};
+
+struct syscall {
+	char	*string;
+	int		params_number;
+	int		params_type[6];
+	int		return_type;
+	int		error;
+	void	(*f)(pid_t process, const struct syscall current, struct user_regs_struct *regs);
+};
+
 struct strace {
 	char	**params;
 	struct {
 		uint8_t		value;
+		uint32_t	fd;
 	} flag;
 };
 
@@ -83,6 +105,14 @@ struct params_getter {
 	uint8_t			dup;
 };
 
+struct info {
+	uint64_t	time;
+	uint64_t	seconds;
+	uint64_t	usecs_call;
+	uint64_t	calls;
+	uint64_t	errors;
+};
+
 struct strace env;
 
 /* params.c */
@@ -94,5 +124,7 @@ void	handle_error(uint32_t line, char *file, t_bool fatal, enum error code, ...)
 int		x_int(int err, int res, char *str, char *file, int line);
 void	*x_void(void *err, void *res, char *str, char *file, int line);
 
+void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs);
+void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 
 #endif
