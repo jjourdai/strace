@@ -124,6 +124,9 @@ void	handle_error(uint32_t line, char *file, t_bool fatal, enum error code, ...)
 int		x_int(int err, int res, char *str, char *file, int line);
 void	*x_void(void *err, void *res, char *str, char *file, int line);
 
+/* get_path.c */
+char	*get_binary_path(char *dest);
+
 void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 

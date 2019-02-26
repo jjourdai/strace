@@ -17,6 +17,8 @@ SRC_NAME =	main.c \
 			err.c \
 			syscall.c \
 			macro_errno.c \
+			get_path.c \
+			signal.c \
 
 OBJ_PATH = ./.obj/
 
@@ -30,8 +32,8 @@ NAME = ft_strace
 	
 CC = gcc
 
-CFLAGS = -Wall -Wextra -fsanitize=address -g -fno-omit-frame-pointer
-#CFLAGS = -Wall -Wextra
+#CFLAGS = -Wall -Wextra -fsanitize=address -g -fno-omit-frame-pointer
+CFLAGS = -Wall -Wextra
 
 OBJ_NAME = $(SRC_NAME:.c=.o)
 

@@ -1,64 +1,50 @@
 #include "strace.h"
 #include "colors.h"
 
-char *get_next_path(char *path)
+void	block_signal(void)
 {
-	static int	index = 0;
-	char		*ptr = NULL;
-	int			previous_index;
-	
-	if (path[index] == 0)
-		return (NULL);	
+	sigset_t blockSet;
 
-	if ((ptr = ft_strchr(path + index, ':'))) {
-		*ptr = 0;
-		previous_index = index;
-		index = ptr - path + 1;
-		return (path + previous_index);
-	} else {
-		previous_index = index;
-		index = strlen(path);
-		return (path + previous_index);
+	sigemptyset(&blockSet);
+	sigaddset(&blockSet, SIGHUP);
+	sigaddset(&blockSet, SIGINT);
+	sigaddset(&blockSet, SIGQUIT);
+	sigaddset(&blockSet, SIGPIPE);
+	sigaddset(&blockSet, SIGTERM);
+	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &blockSet, NULL), "Sigprocmask");
+}
+
+void	release_signal(void)
+{
+	sigset_t empty_set;
+
+	sigemptyset(&empty_set);
+	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &empty_set, NULL), "Sigprocmask");
+}
+
+void	signal_handler(int signum, siginfo_t *info, void *ptr)
+{
+	if (signum == SIGCHLD) {
+	//	printf("SIGCHILD\n");
+	} else if (signum == SIGSEGV) {
+		//printf("SIGSEGV\n");
 	}
+	fflush(stdout);
+
 }
 
-char	*search_binary_in_path(char *binary_name)
+void	init_sigaction(void)
 {
-	char	*path;
-	char	*concat;
-	char	*test;
-	struct stat buf;
+	struct sigaction sa = {
+		.sa_sigaction = SIG_DFL,
+		.sa_flags = SA_SIGINFO,
+	};
+	sigemptyset(&sa.sa_mask);
 
-	if ((path = getenv("PATH")) == NULL) {
-		asprintf(&concat, "/bin/%s", binary_name);
-		return (concat);
-	} else {
-		path = strdup(path);
-		if ((concat = ft_memalloc(strlen(path) + 1 + strlen(binary_name))) == NULL) {
-			fprintf(stderr, "Malloc failure\n"); exit(EXIT_FAILURE);
-		}
-		do
-		{
-			test = get_next_path(path);
-			sprintf(concat, "%s/%s", test, binary_name);
-		} while (test != NULL && stat(concat, &buf));
-		if (test == NULL) {
-			fprintf(stderr, RED_TEXT("%s: Command not found\n"), binary_name); exit(EXIT_FAILURE);
-		}
-		return (concat);
-	}
+//	sigaction(SIGCHLD, &sa, NULL);
+	sigaction(SIGSEGV, &sa, NULL);
+//	sigaction(SIGTRAP, &sa, NULL);
 }
-
-char 	*local_binary(char *bin_name)
-{
-	char	buf[PATH_MAX + 1];
-	char	*concat;
-
-	getcwd(buf, PATH_MAX);	
-	asprintf(&concat, "%s/%s", buf, bin_name);
-	return (concat);
-}
-
 /*
 char *get_string(pid_t process, uint64_t reg)
 {
@@ -87,11 +73,11 @@ char *get_string(pid_t process, uint64_t reg)
 
 char *get_string(pid_t process, uint64_t reg)
 {
-	uint64_t	size = 4096;
 	uint32_t	index = 0;
 	uint32_t	value;
-	char		ptr[36 + 4] = {0};
+	static char		ptr[36 + 4] = {0};
 
+	ft_bzero(ptr, 36);
 	ft_memset(ptr + 36, '.', 3);
 	for (;;)
 	{
@@ -148,6 +134,7 @@ uint32_t display_env(pid_t process, uint64_t reg)
 
 extern const struct syscall syscalls[];
 extern const char			*err_macro[];
+extern const char			*signal_macro[];
 
 void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs)
 {
@@ -160,16 +147,15 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 		[5] = regs->r9,
 	};
 	char	line[128] = {0};
-
-	int		index = 0;
-	int		i = 0;
-	char	*str;
+	int			index = 0;
+	uint64_t	i = 0;
+	char		*str;
 
 	i += sprintf(line + i, "%s(", current.string);
 	while (index < current.params_number)
 	{
 		if (current.params_type[index] == INT) {
-			i += sprintf(line + i, "%d", params[index]);
+			i += sprintf(line + i, "%d", (int)params[index]);
 		} else if (current.params_type[index] == STR) {
 			str = get_string(process, params[index]);	
 			i += sprintf(line + i, "\"%s\"", str);
@@ -177,10 +163,10 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 			if (params[index] == 0) {
 				i += sprintf(line + i, "NULL");
 			} else {
-				i += sprintf(line + i, "%#llx", params[index]);
+				i += sprintf(line + i, "%#llx", (unsigned long long)params[index]);
 			}
 		} else if (current.params_type[index] == LONG) {
-			i += sprintf(line + i, "%llu", params[index]);
+			i += sprintf(line + i, "%llu", (unsigned long long)params[index]);
 		}
 		index++;
 		if (index < current.params_number)
@@ -193,10 +179,10 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs)
 {
 	char *param1;
-	char **param2;
-	char **param3;
+	unsigned int param2;
+	unsigned int param3;
 
-	printf("%s( = ", current.string);
+	printf("%s(", current.string);
 	param1 = get_string(process, regs->rdi);
 	param2 = count_elem(process, regs->rsi);
 	param3 = count_elem(process, regs->rdx);
@@ -214,7 +200,7 @@ void	display_opt_c(const struct info data[512])
 	for (i = 0; i < 512; i++) {
 		if (data[i].calls > 0) {
 			printf("  %.2f %11.6f %11u ", data[i].time, data[i].seconds, data[i].usecs_call);
-			printf("%9u %9u %s\n",data[i].calls, data[i].errors, syscalls[i].string);
+			printf("%9u %9.1u %s\n",data[i].calls, data[i].errors, syscalls[i].string);
 			calls += data[i].calls;
 			errors += data[i].errors;
 		}
@@ -225,14 +211,34 @@ void	display_opt_c(const struct info data[512])
 
 int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st, struct info data[512])
 {
+	int				signal = 0;
+	siginfo_t		info;
+
 	syscalls[regs->orig_rax].f(process, syscalls[regs->orig_rax], regs);
 	data[regs->orig_rax].calls++;
 	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-	waitpid(process, child_st, WUNTRACED);
+	release_signal();
+	waitpid(-1, child_st, WUNTRACED);
+	block_signal();
+/*
+	if (WIFSIGNALED(*child_st) && (signal = WTERMSIG(*child_st)) != SIGTRAP) {
+		printf("--- %s", signal_macro[signal]);
+		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
+		exit(0);
+		printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%d, si_stime=%d} ---\n", \
+		signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
+		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
+			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
+			release_signal();
+			waitpid(-1, child_st, WUNTRACED);
+			block_signal();
+			printf("+++ exited with %s +++\n", signal_macro[signal]);
+		}
+	}
+*/
 	if (WIFEXITED(*child_st))
 		return (END);
 	__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, regs), "ptrace ");
-
 	if (syscalls[regs->orig_rax].return_type == INT) {
 		if ((int)regs->rax <= syscalls[regs->orig_rax].error) {
 			data[regs->orig_rax].errors++;
@@ -240,6 +246,8 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 		} else {
 	 		printf("%d\n", regs->rax);
 		}
+	} else if (regs->rax != 0 && -regs->rax <= ERANGE) {
+		printf("-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
 	} else {
 		printf("%#llx\n", regs->rax);
 	}
@@ -252,33 +260,49 @@ int	main(int argc, char **argv, char **environ)
 	pid_t	process;
 	int		child_st = 0;
 	static struct info data[512];
+	siginfo_t		info;
 
 	bzero(data, sizeof(data));
+
+	char *bin = get_binary_path(env.params[0]);
 	process = fork();
 	if (process == 0) {
-		char *bin;
-		if (ft_strncmp(env.params[0], "./", 2) == 0) 	/* local path */
-			bin = local_binary(env.params[0]);
-		else if (env.params[0][0] == '/')				/* obsolut path */
-			bin = env.params[0];
-		else 											/* relative path */ 
-			bin = search_binary_in_path(env.params[0]);
 		__ASSERTI(-1, execve(bin, env.params, environ), "execve ");
 	} else {
 		struct user_regs_struct regs;
 
 		if (env.flag.value & F_OUTPUT)
 			__ASSERTI(-1, dup2(env.flag.fd, STDOUT_FILENO), "dup2");
-	//	__ASSERTI(-1, ptrace(PTRACE_SETOPTIONS, process, NULL, PTRACE_O_TRACEEXEC), "ptrace "); //PTRACE_O_TRACEEXEC to begin on first execve
+	//	__ASSERTI(-1, ptrace(PTRACE_SETOPTIONS, process, NULL, PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEEXEC), "ptrace "); //PTRACE_O_TRACEEXEC to begin on first execve
 		__ASSERTI(-1, ptrace(PTRACE_SEIZE, process, NULL, NULL), "ptrace ");
 		__ASSERTI(-1, ptrace(PTRACE_INTERRUPT, process, NULL, NULL), "ptrace ");
 
 		wait(&child_st);
 		t_bool status = SYSCALL_OFF;
+		int signal = 0;
 		while (1)
 		{
 			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-			waitpid(process, &child_st, WUNTRACED);
+			release_signal();
+			waitpid(-1, &child_st, WUNTRACED);
+			block_signal();
+			if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
+				printf("--- %s", signal_macro[signal]);
+				ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
+				printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%d, si_stime=%d} ---\n", \
+				signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
+				if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
+					__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
+					release_signal();
+					init_sigaction();
+					waitpid(-1, &child_st, WUNTRACED);
+					block_signal();
+					printf("+++ exited with %s +++\n", signal_macro[child_st]);
+					close(env.flag.fd);
+					kill(getpid(), child_st);
+				}
+				continue ;	
+			}
 			__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, &regs), "ptrace ");
 			if (status == SYSCALL_OFF && regs.orig_rax == SYS_execve)
 				status = SYSCALL_ENTRY;
@@ -293,5 +317,6 @@ int	main(int argc, char **argv, char **environ)
 	if (env.flag.value & F_C) {
 		display_opt_c(data);
 	}
+	close(env.flag.fd);
 	return (EXIT_SUCCESS);
 }
