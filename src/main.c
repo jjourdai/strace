@@ -33,7 +33,7 @@ void	signal_handler(int signum, siginfo_t *info, void *ptr)
 
 }
 
-void	init_sigaction(void)
+void	init_sigaction(int signum)
 {
 	struct sigaction sa = {
 		.sa_sigaction = SIG_DFL,
@@ -41,9 +41,7 @@ void	init_sigaction(void)
 	};
 	sigemptyset(&sa.sa_mask);
 
-//	sigaction(SIGCHLD, &sa, NULL);
-	sigaction(SIGSEGV, &sa, NULL);
-//	sigaction(SIGTRAP, &sa, NULL);
+	sigaction(signum, &sa, NULL);
 }
 /*
 char *get_string(pid_t process, uint64_t reg)
@@ -167,6 +165,8 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 			}
 		} else if (current.params_type[index] == LONG) {
 			i += sprintf(line + i, "%llu", (unsigned long long)params[index]);
+		} else if (current.params_type[index] == SIG) {
+			i += sprintf(line + i, "%s", signal_macro[params[index]]); 
 		}
 		index++;
 		if (index < current.params_number)
@@ -209,6 +209,38 @@ void	display_opt_c(const struct info data[512])
 	printf("100.00    0.000000             %9u %9u total\n", calls, errors);
 }
 
+int		handle_signal(pid_t process, int child_st)
+{
+	siginfo_t		info;
+	int				signal = 0;
+
+	if (WIFSIGNALED(child_st) && (signal = WTERMSIG(child_st)) != SIGTRAP) {
+		printf("<unfinished ...>\n+++ killed by %s +++\n", signal_macro[signal]);
+		fflush(stdout);
+		close(env.flag.fd);
+		kill(getpid(), signal);
+	}
+	if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
+		printf("--- %s", signal_macro[signal]);
+		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
+		printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%d, si_stime=%d} ---\n", \
+			signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
+		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
+			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
+			release_signal();
+			init_sigaction(child_st);
+			waitpid(-1, &child_st, WUNTRACED);
+			block_signal();
+			printf("+++ killed by %s +++\n", signal_macro[child_st]);
+			fflush(stdout);
+			close(env.flag.fd);
+			kill(getpid(), child_st);
+		}
+		return (1);
+	}
+	return (0);
+}
+
 int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st, struct info data[512])
 {
 	int				signal = 0;
@@ -220,22 +252,8 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 	release_signal();
 	waitpid(-1, child_st, WUNTRACED);
 	block_signal();
-/*
-	if (WIFSIGNALED(*child_st) && (signal = WTERMSIG(*child_st)) != SIGTRAP) {
-		printf("--- %s", signal_macro[signal]);
-		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
-		exit(0);
-		printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%d, si_stime=%d} ---\n", \
-		signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
-		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
-			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
-			release_signal();
-			waitpid(-1, child_st, WUNTRACED);
-			block_signal();
-			printf("+++ exited with %s +++\n", signal_macro[signal]);
-		}
-	}
-*/
+	if (handle_signal(process, *child_st) == 1)
+		return (0);
 	if (WIFEXITED(*child_st))
 		return (END);
 	__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, regs), "ptrace ");
@@ -260,7 +278,6 @@ int	main(int argc, char **argv, char **environ)
 	pid_t	process;
 	int		child_st = 0;
 	static struct info data[512];
-	siginfo_t		info;
 
 	bzero(data, sizeof(data));
 
@@ -279,30 +296,14 @@ int	main(int argc, char **argv, char **environ)
 
 		wait(&child_st);
 		t_bool status = SYSCALL_OFF;
-		int signal = 0;
 		while (1)
 		{
 			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
 			release_signal();
 			waitpid(-1, &child_st, WUNTRACED);
 			block_signal();
-			if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
-				printf("--- %s", signal_macro[signal]);
-				ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
-				printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%d, si_stime=%d} ---\n", \
-				signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
-				if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
-					__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
-					release_signal();
-					init_sigaction();
-					waitpid(-1, &child_st, WUNTRACED);
-					block_signal();
-					printf("+++ exited with %s +++\n", signal_macro[child_st]);
-					close(env.flag.fd);
-					kill(getpid(), child_st);
-				}
-				continue ;	
-			}
+			if (handle_signal(process, child_st) == 1)
+				continue ;
 			__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, &regs), "ptrace ");
 			if (status == SYSCALL_OFF && regs.orig_rax == SYS_execve)
 				status = SYSCALL_ENTRY;
@@ -315,7 +316,7 @@ int	main(int argc, char **argv, char **environ)
 		printf("+++ exited with %d +++\n", child_st / 256);
 	}
 	if (env.flag.value & F_C) {
-		display_opt_c(data);
+		display_opt_c(data); //deplacer cette ligne en cas de SEGV / KILL etc...
 	}
 	close(env.flag.fd);
 	return (EXIT_SUCCESS);

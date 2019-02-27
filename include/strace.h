@@ -72,6 +72,7 @@ enum	parameters_type {
 	PTR,
 	LONG,
 	STR,
+	SIG,
 };
 
 struct syscall {
