@@ -26,6 +26,7 @@
 # include <sys/syscall.h> 
 # include <sys/reg.h> 
 # include <linux/elf.h>
+# include <sys/uio.h>
 
 # define COUNT_OF(ptr) (sizeof(ptr) / sizeof((ptr)[0]))
 # define USAGE "[-hoc]\n"

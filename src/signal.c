@@ -1,4 +1,5 @@
 #include "strace.h"
+
 const char *signal_macro[] = {
   [1] = "SIGHUP",
   [2] = "SIGINT",

@@ -22,14 +22,8 @@ void	release_signal(void)
 	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &empty_set, NULL), "Sigprocmask");
 }
 
-void	signal_handler(int signum, siginfo_t *info, void *ptr)
+void	signal_handler(int signum)
 {
-	if (signum == SIGCHLD) {
-	//	printf("SIGCHILD\n");
-	} else if (signum == SIGSEGV) {
-		//printf("SIGSEGV\n");
-	}
-	fflush(stdout);
 
 }
 
@@ -43,48 +37,40 @@ void	init_sigaction(int signum)
 
 	sigaction(signum, &sa, NULL);
 }
-/*
-char *get_string(pid_t process, uint64_t reg)
-{
-	uint64_t	size = 4096;
-	uint32_t	index = 0;
-	uint32_t	value;
-	char		*ptr;
 
-	if ((ptr = ft_memalloc(size)) == NULL) {
-		fprintf(stderr, "Malloc failure\n"); exit(EXIT_FAILURE);
-	}
-	for (;;)
-	{
-		value = __ASSERTI(-1, ptrace(PTRACE_PEEKTEXT, process, reg + index, NULL), "ptrace ");
-		memcpy(ptr + index, &value, sizeof(value));
-		index += 4;
-		if (value == 0)
-			return (ptr);
-		if (index >= size - 4) {
-			size *= 2;
-			ptr = realloc(ptr, size);
-		}
-	}
+void	init_signal(void)
+{
+	struct sigaction sa = {
+		.sa_sigaction = SIG_IGN,
+	};
+
+	sigaction(SIGTTOU, &sa, NULL);
+	sigaction(SIGTTIN, &sa, NULL);
+	sa.sa_sigaction = NULL;
+	sa.sa_handler = signal_handler;
+	sigaction(SIGHUP, &sa, NULL);
+	sigaction(SIGINT, &sa, NULL);
+	sigaction(SIGQUIT, &sa, NULL);
+	sigaction(SIGPIPE, &sa, NULL);
+	sigaction(SIGTERM, &sa, NULL);
 }
-*/
 
 char *get_string(pid_t process, uint64_t reg)
 {
-	uint32_t	index = 0;
-	uint32_t	value;
-	static char		ptr[36 + 4] = {0};
+	static char		loc_buf[PATH_MAX + 1];
+	struct iovec	remote;
+	struct iovec	local;
 
-	ft_bzero(ptr, 36);
-	ft_memset(ptr + 36, '.', 3);
-	for (;;)
-	{
-		value = __ASSERTI(-1, ptrace(PTRACE_PEEKTEXT, process, reg + index, NULL), "ptrace ");
-		memcpy(ptr + index, &value, sizeof(value));
-		index += 4;
-		if (value == 0 || index + 4 > 36)
-			return (ptr);
-	}
+	bzero(loc_buf, sizeof(loc_buf));
+	remote.iov_base = (void*)reg;
+	remote.iov_len = 68;
+
+	local.iov_base = loc_buf; 
+	local.iov_len = PATH_MAX; 
+
+	__ASSERTI(-1, process_vm_readv(process, &local, 1, &remote, 1, 0), "process_vm_readv");
+//rajouter espacing function
+	return (loc_buf);
 }
 
 uint32_t count_elem(pid_t process, uint64_t reg)
@@ -102,33 +88,41 @@ uint32_t count_elem(pid_t process, uint64_t reg)
 	return (index / 8);
 }
 
-/*
-uint32_t display_env(pid_t process, uint64_t reg)
+char	 *display_env(pid_t process, uint64_t reg)
 {
-	uint64_t	value;
+	uint32_t	value;
 	uint32_t	index = 0;
-	char		*string;
+	char		*ptr;
+	static char		result[PATH_MAX + 1] = {0};
+	size_t			size = 0;
 
+
+	struct		iovec remote;
+	struct		iovec local;
+	char		loc_buf[PATH_MAX + 1];
+
+
+	remote.iov_len = 8;
+	local.iov_base = loc_buf;
+	local.iov_len = PATH_MAX;
 	for (;;)
 	{
-		value = __ASSERTI(-1, ptrace(PTRACE_PEEKDATA, process, reg + index, NULL), "ptrace ");
-		printf("%llx %#llx\n", reg + index , (0xFFFFFFFF00000000 & (reg + index) | (0xffffffff & value)));
-		
-//		value = __ASSERTI(-1, ptrace(PTRACE_PEEKTEXT, process, (0xFFFFFFFF00000000 & (reg + index) | (0xffffffff & value)), NULL), "ptrace ");
-		printf("%s\n", get_string(process, (0xFFFFFFFF00000000 & (reg + index) | (0xffffffff & value))));
-		exit(0);
-	ft_putendl("JE SUIS LA");
-
-//		printf("%d\n", index / 8);
-//		printf("value %llx\n", value);
-//		fflush(stdout);
-		if (value == 0)
+		remote.iov_base = (void*)(reg + index);
+		__ASSERTI(-1, process_vm_readv(process, &local, 1, &remote, 1, 0), "process_vm_readv");
+		remote.iov_base = *((uint64_t*)local.iov_base);
+		if (*((uint64_t*)local.iov_base) == 0)
 			break ;
 		index += 8;
+		ptr = get_string(process, *((uint64_t*)local.iov_base));
+		if (size + strlen(ptr) > PATH_MAX)
+			break ;
+		if (size == 0)
+			size += sprintf(result + size, "\"%s\"", ptr);
+		else
+			size += sprintf(result + size, ", \"%s\"", ptr);
 	}
-	return (index / 8);
+	return (result);
 }
-*/
 
 extern const struct syscall syscalls[];
 extern const char			*err_macro[];
@@ -171,22 +165,24 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 		index++;
 		if (index < current.params_number)
 			i += sprintf(line + i, ", ");
-	}	
+	}
 	sprintf(line + i, ") = ");
 	printf("%s", line);
 }
 
 void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs)
 {
-	char *param1;
-	unsigned int param2;
-	unsigned int param3;
+	char			*param1;
+	char			*param2;
+	unsigned int	param3;
 
 	printf("%s(", current.string);
 	param1 = get_string(process, regs->rdi);
-	param2 = count_elem(process, regs->rsi);
+	printf("\"%s\",", param1);
+	param2 = display_env(process, regs->rsi);
+	printf(" [%s],", param2);
 	param3 = count_elem(process, regs->rdx);
-	printf("\"%s\", [\"%u\"], [/* %u vars */]) = ", param1, param2, param3);
+	printf(" [/* %u vars */]) = ", param3);
 }
 
 void	display_opt_c(const struct info data[512])
@@ -213,7 +209,7 @@ int		handle_signal(pid_t process, int child_st)
 {
 	siginfo_t		info;
 	int				signal = 0;
-
+	
 	if (WIFSIGNALED(child_st) && (signal = WTERMSIG(child_st)) != SIGTRAP) {
 		printf("<unfinished ...>\n+++ killed by %s +++\n", signal_macro[signal]);
 		fflush(stdout);
@@ -294,6 +290,7 @@ int	main(int argc, char **argv, char **environ)
 		__ASSERTI(-1, ptrace(PTRACE_SEIZE, process, NULL, NULL), "ptrace ");
 		__ASSERTI(-1, ptrace(PTRACE_INTERRUPT, process, NULL, NULL), "ptrace ");
 
+		init_signal();
 		wait(&child_st);
 		t_bool status = SYSCALL_OFF;
 		while (1)
