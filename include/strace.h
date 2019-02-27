@@ -132,4 +132,10 @@ char	*get_binary_path(char *dest);
 void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 
+/* signal.c */
+void	release_signal(void);
+void	init_signal(void);
+void	init_sigaction(int signum);
+
+
 #endif

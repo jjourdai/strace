@@ -1,60 +1,6 @@
 #include "strace.h"
 #include "colors.h"
 
-void	block_signal(void)
-{
-	sigset_t blockSet;
-
-	sigemptyset(&blockSet);
-	sigaddset(&blockSet, SIGHUP);
-	sigaddset(&blockSet, SIGINT);
-	sigaddset(&blockSet, SIGQUIT);
-	sigaddset(&blockSet, SIGPIPE);
-	sigaddset(&blockSet, SIGTERM);
-	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &blockSet, NULL), "Sigprocmask");
-}
-
-void	release_signal(void)
-{
-	sigset_t empty_set;
-
-	sigemptyset(&empty_set);
-	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &empty_set, NULL), "Sigprocmask");
-}
-
-void	signal_handler(int signum)
-{
-
-}
-
-void	init_sigaction(int signum)
-{
-	struct sigaction sa = {
-		.sa_sigaction = SIG_DFL,
-		.sa_flags = SA_SIGINFO,
-	};
-	sigemptyset(&sa.sa_mask);
-
-	sigaction(signum, &sa, NULL);
-}
-
-void	init_signal(void)
-{
-	struct sigaction sa = {
-		.sa_sigaction = SIG_IGN,
-	};
-
-	sigaction(SIGTTOU, &sa, NULL);
-	sigaction(SIGTTIN, &sa, NULL);
-	sa.sa_sigaction = NULL;
-	sa.sa_handler = signal_handler;
-	sigaction(SIGHUP, &sa, NULL);
-	sigaction(SIGINT, &sa, NULL);
-	sigaction(SIGQUIT, &sa, NULL);
-	sigaction(SIGPIPE, &sa, NULL);
-	sigaction(SIGTERM, &sa, NULL);
-}
-
 char *get_string(pid_t process, uint64_t reg)
 {
 	static char		loc_buf[PATH_MAX + 1];
