@@ -35,25 +35,22 @@ const char *signal_macro[] = {
   [32] = "SIGRTMIN",
 };
 
-void	block_signal(void)
+void	block_signal(sigset_t *blockSet)
 {
-	sigset_t blockSet;
 
-	sigemptyset(&blockSet);
-	sigaddset(&blockSet, SIGHUP);
-	sigaddset(&blockSet, SIGINT);
-	sigaddset(&blockSet, SIGQUIT);
-	sigaddset(&blockSet, SIGPIPE);
-	sigaddset(&blockSet, SIGTERM);
-	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &blockSet, NULL), "Sigprocmask");
+	sigemptyset(blockSet);
+	sigaddset(blockSet, SIGHUP);
+	sigaddset(blockSet, SIGINT);
+	sigaddset(blockSet, SIGQUIT);
+	sigaddset(blockSet, SIGPIPE);
+	sigaddset(blockSet, SIGTERM);
+	//__ASSERTI(-1, sigprocmask(SIG_BLOCK, blockSet, NULL), "Sigprocmask");
 }
 
-void	release_signal(void)
+void	release_signal(sigset_t *empty_set)
 {
-	sigset_t empty_set;
-
-	sigemptyset(&empty_set);
-	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &empty_set, NULL), "Sigprocmask");
+	sigemptyset(empty_set);
+//	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &empty_set, NULL), "Sigprocmask");
 }
 
 void	signal_handler(int signum)

@@ -27,6 +27,8 @@
 # include <sys/reg.h> 
 # include <linux/elf.h>
 # include <sys/uio.h>
+# include <bits/uio-ext.h>
+# include <sys/time.h>
 
 # define COUNT_OF(ptr) (sizeof(ptr) / sizeof((ptr)[0]))
 # define USAGE "[-hoc]\n"
@@ -87,6 +89,8 @@ struct syscall {
 
 struct strace {
 	char	**params;
+	sigset_t	blockset;
+	sigset_t	emptyset;
 	struct {
 		uint8_t		value;
 		uint32_t	fd;
@@ -110,7 +114,6 @@ struct params_getter {
 struct info {
 	uint64_t	time;
 	uint64_t	seconds;
-	uint64_t	usecs_call;
 	uint64_t	calls;
 	uint64_t	errors;
 };
@@ -133,9 +136,10 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 
 /* signal.c */
-void	release_signal(void);
 void	init_signal(void);
 void	init_sigaction(int signum);
+void	block_signal(sigset_t *blockSet);
+void	release_signal(sigset_t *empty_set);
 
 
 #endif

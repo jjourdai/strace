@@ -1,6 +1,42 @@
 #include "strace.h"
 #include "colors.h"
 
+/*
+int		is_escape(char c)
+{
+	if (c <= 13 && c >= 0)
+		return (1);
+	return (0);
+}
+
+char	*espace_special_char(char *ptr)
+{
+	static const char special_char[] = {
+		[0] = '0',
+		[7] = 'a',
+		[8] = 'b',
+		[9] = 't',
+		[10] = 'n',
+		[11] = 'v',
+		[12] = 'f',
+		[13] = 'r',
+	};
+	static		char returned_buf[PATH_MAX + 1];
+	int			j = 0;
+
+	for (int i = 0; i < 34; i++)
+	{
+		if (is_escape(ptr[i]) && special_char[(int)ptr[i]]) {
+			returned_buf[j++] = '\\';
+			returned_buf[j++] = special_char[(int)ptr[i]];
+			continue ;
+		}
+		returned_buf[j++] = ptr[i];
+	}
+	return (returned_buf);
+}
+*/
+
 char *get_string(pid_t process, uint64_t reg)
 {
 	static char		loc_buf[PATH_MAX + 1];
@@ -9,13 +45,12 @@ char *get_string(pid_t process, uint64_t reg)
 
 	bzero(loc_buf, sizeof(loc_buf));
 	remote.iov_base = (void*)reg;
-	remote.iov_len = 68;
+	remote.iov_len = 34;
 
 	local.iov_base = loc_buf; 
 	local.iov_len = PATH_MAX; 
 
 	__ASSERTI(-1, process_vm_readv(process, &local, 1, &remote, 1, 0), "process_vm_readv");
-//rajouter espacing function
 	return (loc_buf);
 }
 
@@ -36,7 +71,6 @@ uint32_t count_elem(pid_t process, uint64_t reg)
 
 char	 *display_env(pid_t process, uint64_t reg)
 {
-	uint32_t	value;
 	uint32_t	index = 0;
 	char		*ptr;
 	static char		result[PATH_MAX + 1] = {0};
@@ -55,7 +89,7 @@ char	 *display_env(pid_t process, uint64_t reg)
 	{
 		remote.iov_base = (void*)(reg + index);
 		__ASSERTI(-1, process_vm_readv(process, &local, 1, &remote, 1, 0), "process_vm_readv");
-		remote.iov_base = *((uint64_t*)local.iov_base);
+		remote.iov_base = (void*)*((uint64_t*)local.iov_base);
 		if (*((uint64_t*)local.iov_base) == 0)
 			break ;
 		index += 8;
@@ -141,8 +175,8 @@ void	display_opt_c(const struct info data[512])
 	printf("------ ----------- ----------- --------- --------- ----------------\n");
 	for (i = 0; i < 512; i++) {
 		if (data[i].calls > 0) {
-			printf("  %.2f %11.6f %11u ", data[i].time, data[i].seconds, data[i].usecs_call);
-			printf("%9u %9.1u %s\n",data[i].calls, data[i].errors, syscalls[i].string);
+			printf("  %.2f %11.llu %11lu ", (float)data[i].time, data[i].seconds, data[i].seconds / data[i].calls);
+			printf("%9lu %9.1lu %s\n", data[i].calls, data[i].errors, syscalls[i].string);
 			calls += data[i].calls;
 			errors += data[i].errors;
 		}
@@ -165,35 +199,49 @@ int		handle_signal(pid_t process, int child_st)
 	if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
 		printf("--- %s", signal_macro[signal]);
 		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
-		printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%d, si_stime=%d} ---\n", \
+		printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%ld, si_stime=%ld} ---\n", \
 			signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
+		__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
+		waitpid(-1, &child_st, WUNTRACED);
 		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
-			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
-			release_signal();
+			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 			init_sigaction(child_st);
-			waitpid(-1, &child_st, WUNTRACED);
-			block_signal();
-			printf("+++ killed by %s +++\n", signal_macro[child_st]);
+			__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
+			printf("+++ killed by %s +++\n", signal_macro[signal]);
 			fflush(stdout);
 			close(env.flag.fd);
-			kill(getpid(), child_st);
+			kill(getpid(), signal);
 		}
 		return (1);
 	}
 	return (0);
 }
 
+uint64_t	handle_timer(const struct timeval *now, const struct timeval *past)
+{
+	uint64_t time = ((now->tv_sec) << 20) | (now->tv_usec);
+	uint64_t time2 = ((past->tv_sec) << 20) | (past->tv_usec);
+	return time - time2;
+}
+
 int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st, struct info data[512])
 {
-	int				signal = 0;
-	siginfo_t		info;
-
+	struct timeval bef;
+	struct timeval aft;
+		
+	ft_bzero(&bef, sizeof(bef));
+	ft_bzero(&aft, sizeof(aft));
 	syscalls[regs->orig_rax].f(process, syscalls[regs->orig_rax], regs);
 	data[regs->orig_rax].calls++;
+		
+	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
+	gettimeofday(&bef, NULL);
 	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-	release_signal();
+
+	gettimeofday(&aft, NULL);
 	waitpid(-1, child_st, WUNTRACED);
-	block_signal();
+	data[regs->orig_rax].seconds += handle_timer(&aft, &bef);
+	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
 	if (handle_signal(process, *child_st) == 1)
 		return (0);
 	if (WIFEXITED(*child_st))
@@ -204,7 +252,7 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 			data[regs->orig_rax].errors++;
 	 		printf("-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
 		} else {
-	 		printf("%d\n", regs->rax);
+	 		printf("%lld\n", regs->rax);
 		}
 	} else if (regs->rax != 0 && -regs->rax <= ERANGE) {
 		printf("-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
@@ -223,6 +271,9 @@ int	main(int argc, char **argv, char **environ)
 
 	bzero(data, sizeof(data));
 
+	release_signal(&env.emptyset);
+	block_signal(&env.blockset);
+
 	char *bin = get_binary_path(env.params[0]);
 	process = fork();
 	if (process == 0) {
@@ -230,26 +281,26 @@ int	main(int argc, char **argv, char **environ)
 	} else {
 		struct user_regs_struct regs;
 
-		if (env.flag.value & F_OUTPUT)
-			__ASSERTI(-1, dup2(env.flag.fd, STDOUT_FILENO), "dup2");
-	//	__ASSERTI(-1, ptrace(PTRACE_SETOPTIONS, process, NULL, PTRACE_O_TRACESYSGOOD | PTRACE_O_TRACEEXEC), "ptrace "); //PTRACE_O_TRACEEXEC to begin on first execve
 		__ASSERTI(-1, ptrace(PTRACE_SEIZE, process, NULL, NULL), "ptrace ");
 		__ASSERTI(-1, ptrace(PTRACE_INTERRUPT, process, NULL, NULL), "ptrace ");
-
+		if (env.flag.value & F_OUTPUT)
+			__ASSERTI(-1, dup2(env.flag.fd, STDOUT_FILENO), "dup2");
 		init_signal();
-		wait(&child_st);
+		waitpid(process, &child_st, WUNTRACED);
+		
 		t_bool status = SYSCALL_OFF;
 		while (1)
 		{
 			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-			release_signal();
+
+			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 			waitpid(-1, &child_st, WUNTRACED);
-			block_signal();
-			if (handle_signal(process, child_st) == 1)
-				continue ;
+			__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
+			handle_signal(process, child_st);
 			__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, &regs), "ptrace ");
-			if (status == SYSCALL_OFF && regs.orig_rax == SYS_execve)
+			if (status == SYSCALL_OFF && regs.orig_rax == SYS_execve) {
 				status = SYSCALL_ENTRY;
+			}
 			if (status == SYSCALL_ENTRY) {
 				if (display_syscall(process, &regs, &child_st, data) == END)
 					break ;
