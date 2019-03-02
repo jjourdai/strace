@@ -275,28 +275,31 @@ int	main(int argc, char **argv, char **environ)
 	block_signal(&env.blockset);
 
 	char *bin = get_binary_path(env.params[0]);
-	process = fork();
+	process = __ASSERTI(-1, fork(), "Fork ");
 	if (process == 0) {
+		kill(getpid(), SIGSTOP);
 		__ASSERTI(-1, execve(bin, env.params, environ), "execve ");
 	} else {
 		struct user_regs_struct regs;
 
+		waitpid(process, &child_st, WUNTRACED);
 		__ASSERTI(-1, ptrace(PTRACE_SEIZE, process, NULL, NULL), "ptrace ");
 		__ASSERTI(-1, ptrace(PTRACE_INTERRUPT, process, NULL, NULL), "ptrace ");
 		if (env.flag.value & F_OUTPUT)
 			__ASSERTI(-1, dup2(env.flag.fd, STDOUT_FILENO), "dup2");
-		init_signal();
+		kill(process, SIGCONT);
 		waitpid(process, &child_st, WUNTRACED);
-		
+		init_signal();
+
 		t_bool status = SYSCALL_OFF;
 		while (1)
 		{
 			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-
 			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 			waitpid(-1, &child_st, WUNTRACED);
 			__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
-			handle_signal(process, child_st);
+			if (status == SYSCALL_ENTRY)
+				handle_signal(process, child_st);
 			__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, &regs), "ptrace ");
 			if (status == SYSCALL_OFF && regs.orig_rax == SYS_execve) {
 				status = SYSCALL_ENTRY;

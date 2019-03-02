@@ -35,41 +35,37 @@ const char *signal_macro[] = {
   [32] = "SIGRTMIN",
 };
 
-void	block_signal(sigset_t *blockSet)
+inline void	block_signal(sigset_t *blockSet)
 {
-
 	sigemptyset(blockSet);
 	sigaddset(blockSet, SIGHUP);
 	sigaddset(blockSet, SIGINT);
 	sigaddset(blockSet, SIGQUIT);
 	sigaddset(blockSet, SIGPIPE);
 	sigaddset(blockSet, SIGTERM);
-	//__ASSERTI(-1, sigprocmask(SIG_BLOCK, blockSet, NULL), "Sigprocmask");
 }
 
-void	release_signal(sigset_t *empty_set)
+inline void	release_signal(sigset_t *empty_set)
 {
 	sigemptyset(empty_set);
-//	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &empty_set, NULL), "Sigprocmask");
 }
 
 void	signal_handler(int signum)
 {
-
+	
 }
 
-void	init_sigaction(int signum)
+inline void	init_sigaction(int signum)
 {
 	struct sigaction sa = {
 		.sa_handler = SIG_DFL,
-		//.sa_flags = SA_SIGINFO,
 	};
 	sigemptyset(&sa.sa_mask);
 
 	sigaction(signum, &sa, NULL);
 }
 
-void	init_signal(void)
+inline void	init_signal(void)
 {
 	struct sigaction sa = {
 		.sa_handler = SIG_IGN,
