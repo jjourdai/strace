@@ -116,6 +116,7 @@ struct info {
 	uint64_t	seconds;
 	uint64_t	calls;
 	uint64_t	errors;
+	char		*string;
 };
 
 struct strace env;

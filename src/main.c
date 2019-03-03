@@ -170,26 +170,46 @@ void	display_opt_c(struct info data[512])
 	uint32_t i;
 	uint32_t errors = 0;
 	uint32_t calls = 0;
+	float	 time = 0;
 	float	 seconds = 0;
 
-	fprintf(stderr, "%% time	   seconds  usecs/call     calls    errors syscall\n");
-	fprintf(stderr, "------ ----------- ----------- --------- --------- ----------------\n");
+	/* Fill informations about performed syscall */
 	for (i = 0; i < 512; i++) {
 		if (data[i].calls > 0) {
 			calls += data[i].calls;
 			errors += data[i].errors;
 			seconds += (float)data[i].seconds / 1000000;
+			data[i].string = syscalls[i].string;
 		}
 	}
 	for (i = 0; i < 512; i++) {
 		if (data[i].calls > 0) {
 			data[i].time = ((float)data[i].seconds / 1000000) / seconds * 100;
-		//	fprintf(stderr, " %5.2f %11.6f %11lu ", (float)data[i].time, (float)data[i].seconds / 1000000, data[i].seconds / data[i].calls);
-		//	fprintf(stderr, "%9lu %9.lu %s\n", data[i].calls, data[i].errors, syscalls[i].string);
+			time += data[i].time;
+		}
+	}
+	/* print in order */
+	fprintf(stderr, "%% time	   seconds  usecs/call     calls    errors syscall\n");
+	fprintf(stderr, "------ ----------- ----------- --------- --------- ----------------\n");
+	struct info *ptr;
+	uint64_t	max = UINT64_MAX;
+	while (max > 0) 
+	{	
+		max = 0;
+		for (i = 0; i < 512; i++) {
+			if (data[i].seconds > max) {
+				max = data[i].seconds;
+				ptr = &data[i];
+			}
+		}
+		if (max > 0) {
+			fprintf(stderr, " %5.2f %11.6f %11lu ", (float)ptr->time, (float)ptr->seconds / 1000000, ptr->seconds / ptr->calls);
+			fprintf(stderr, "%9lu %9.lu %s\n", ptr->calls, ptr->errors, ptr->string);
+			ptr->seconds = 0;
 		}
 	}
 	fprintf(stderr, "------ ----------- ----------- --------- --------- ----------------\n");
-	fprintf(stderr, "100.00 %11.6f             %9u %9u total\n", seconds, calls, errors);
+	fprintf(stderr, "%.2f %11.6f             %9u %9u total\n", time, seconds, calls, errors);
 }
 
 int		handle_signal(pid_t process, int child_st)
@@ -326,7 +346,6 @@ int	main(int argc, char **argv, char **environ)
 		kill(process, SIGCONT);
 		waitpid(process, &child_st, WUNTRACED);
 		init_signal();
-
 		t_bool status = SYSCALL_OFF;
 		while (1)
 		{
