@@ -165,24 +165,31 @@ void	sys_execve(pid_t process, const struct syscall current, struct user_regs_st
 	printf(" [/* %u vars */]) = ", param3);
 }
 
-void	display_opt_c(const struct info data[512])
+void	display_opt_c(struct info data[512])
 {
 	uint32_t i;
 	uint32_t errors = 0;
 	uint32_t calls = 0;
+	float	 seconds = 0;
 
-	printf("%% time	   seconds  usecs/call     calls    errors syscall\n");
-	printf("------ ----------- ----------- --------- --------- ----------------\n");
+	fprintf(stderr, "%% time	   seconds  usecs/call     calls    errors syscall\n");
+	fprintf(stderr, "------ ----------- ----------- --------- --------- ----------------\n");
 	for (i = 0; i < 512; i++) {
 		if (data[i].calls > 0) {
-			printf("  %.2f %11.llu %11lu ", (float)data[i].time, data[i].seconds, data[i].seconds / data[i].calls);
-			printf("%9lu %9.1lu %s\n", data[i].calls, data[i].errors, syscalls[i].string);
 			calls += data[i].calls;
 			errors += data[i].errors;
+			seconds += (float)data[i].seconds / 1000000;
 		}
 	}
-	printf("------ ----------- ----------- --------- --------- ----------------\n");
-	printf("100.00    0.000000             %9u %9u total\n", calls, errors);
+	for (i = 0; i < 512; i++) {
+		if (data[i].calls > 0) {
+			data[i].time = ((float)data[i].seconds / 1000000) / seconds * 100;
+		//	fprintf(stderr, " %5.2f %11.6f %11lu ", (float)data[i].time, (float)data[i].seconds / 1000000, data[i].seconds / data[i].calls);
+		//	fprintf(stderr, "%9lu %9.lu %s\n", data[i].calls, data[i].errors, syscalls[i].string);
+		}
+	}
+	fprintf(stderr, "------ ----------- ----------- --------- --------- ----------------\n");
+	fprintf(stderr, "100.00 %11.6f             %9u %9u total\n", seconds, calls, errors);
 }
 
 int		handle_signal(pid_t process, int child_st)
@@ -199,8 +206,9 @@ int		handle_signal(pid_t process, int child_st)
 	if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
 		printf("--- %s", signal_macro[signal]);
 		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
-		printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%ld, si_stime=%ld} ---\n", \
-			signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
+		if (!(env.flag.value & F_C))
+			printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%ld, si_stime=%ld} ---\n", \
+				signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
 		if (signal != SIGCONT) {
 			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
 			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
@@ -226,21 +234,20 @@ uint64_t	handle_timer(const struct timeval *now, const struct timeval *past)
 	return time - time2;
 }
 
-int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st, struct info data[512])
+int		store_syscall_data(pid_t process, struct user_regs_struct *regs, int *child_st, struct info data[512])
 {
 	struct timeval bef;
 	struct timeval aft;
 		
 	ft_bzero(&bef, sizeof(bef));
 	ft_bzero(&aft, sizeof(aft));
-	syscalls[regs->orig_rax].f(process, syscalls[regs->orig_rax], regs);
 	data[regs->orig_rax].calls++;
 		
 	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
-	gettimeofday(&bef, NULL);
 	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-	gettimeofday(&aft, NULL);
+	gettimeofday(&bef, NULL);
 	waitpid(-1, child_st, WUNTRACED);
+	gettimeofday(&aft, NULL);
 	data[regs->orig_rax].seconds += handle_timer(&aft, &bef);
 	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
 	if (handle_signal(process, *child_st) == 1)
@@ -251,6 +258,35 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 	if (syscalls[regs->orig_rax].return_type == INT) {
 		if ((int)regs->rax <= syscalls[regs->orig_rax].error) {
 			data[regs->orig_rax].errors++;
+		}
+	} else if (regs->rax != 0 && -regs->rax <= ERANGE) {
+		data[regs->orig_rax].errors++;
+	}
+	return (0);
+}
+
+int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st)
+{
+	struct timeval bef;
+	struct timeval aft;
+		
+	ft_bzero(&bef, sizeof(bef));
+	ft_bzero(&aft, sizeof(aft));
+	syscalls[regs->orig_rax].f(process, syscalls[regs->orig_rax], regs);
+		
+	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
+	gettimeofday(&bef, NULL);
+	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
+	gettimeofday(&aft, NULL);
+	waitpid(-1, child_st, WUNTRACED);
+	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
+	if (handle_signal(process, *child_st) == 1)
+		return (0);
+	if (WIFEXITED(*child_st))
+		return (END);
+	__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, regs), "ptrace ");
+	if (syscalls[regs->orig_rax].return_type == INT) {
+		if ((int)regs->rax <= syscalls[regs->orig_rax].error) {
 	 		printf("-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
 		} else {
 	 		printf("%lld\n", regs->rax);
@@ -305,15 +341,20 @@ int	main(int argc, char **argv, char **environ)
 				status = SYSCALL_ENTRY;
 			}
 			if (status == SYSCALL_ENTRY) {
-				if (display_syscall(process, &regs, &child_st, data) == END)
+				if (env.flag.value & F_C) {
+					if (store_syscall_data(process, &regs, &child_st, data) == END)
+						break ;
+				}
+				else if (display_syscall(process, &regs, &child_st) == END)
 					break ;
 			}
 		}
-		printf("?\n");
-		printf("+++ exited with %d +++\n", WEXITSTATUS(child_st));
 	}
 	if (env.flag.value & F_C) {
 		display_opt_c(data); //deplacer cette ligne en cas de SEGV / KILL etc...
+	} else {
+		printf("?\n");
+		printf("+++ exited with %d +++\n", WEXITSTATUS(child_st));
 	}
 	close(env.flag.fd);
 	return (EXIT_SUCCESS);

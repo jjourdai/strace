@@ -112,7 +112,7 @@ struct params_getter {
 };
 
 struct info {
-	uint64_t	time;
+	float		time;
 	uint64_t	seconds;
 	uint64_t	calls;
 	uint64_t	errors;
