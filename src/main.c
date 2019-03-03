@@ -201,12 +201,14 @@ int		handle_signal(pid_t process, int child_st)
 		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
 		printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%ld, si_stime=%ld} ---\n", \
 			signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
-		__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
-		waitpid(-1, &child_st, WUNTRACED);
-		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
+		if (signal != SIGCONT) {
+			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
 			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
-			init_sigaction(child_st);
+			waitpid(-1, &child_st, WUNTRACED);
 			__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
+		}
+		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
+			init_sigaction(child_st);
 			printf("+++ killed by %s +++\n", signal_macro[signal]);
 			fflush(stdout);
 			close(env.flag.fd);
@@ -237,7 +239,6 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 	gettimeofday(&bef, NULL);
 	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-
 	gettimeofday(&aft, NULL);
 	waitpid(-1, child_st, WUNTRACED);
 	data[regs->orig_rax].seconds += handle_timer(&aft, &bef);
@@ -270,7 +271,6 @@ int	main(int argc, char **argv, char **environ)
 	static struct info data[512];
 
 	bzero(data, sizeof(data));
-
 	release_signal(&env.emptyset);
 	block_signal(&env.blockset);
 
@@ -310,7 +310,7 @@ int	main(int argc, char **argv, char **environ)
 			}
 		}
 		printf("?\n");
-		printf("+++ exited with %d +++\n", child_st / 256);
+		printf("+++ exited with %d +++\n", WEXITSTATUS(child_st));
 	}
 	if (env.flag.value & F_C) {
 		display_opt_c(data); //deplacer cette ligne en cas de SEGV / KILL etc...
