@@ -15,7 +15,8 @@ SRC_PATH = ./src/
 SRC_NAME =	main.c \
 			param.c \
 			err.c \
-			syscall.c \
+			syscall_32.c \
+			syscall_64.c \
 			macro_errno.c \
 			get_path.c \
 			signal.c \

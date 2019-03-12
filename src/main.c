@@ -104,12 +104,20 @@ char	 *display_env(pid_t process, uint64_t reg)
 	return (result);
 }
 
-extern const struct syscall syscalls[];
+struct syscall *syscalls;
+
+extern const struct syscall syscalls_32[];
+extern const uint32_t		syscalls_32_value;
+extern const struct syscall syscalls_64[];
+extern const uint32_t		syscalls_64_value;
 extern const char			*err_macro[];
 extern const char			*signal_macro[];
 
+#include <sys/reg.h>
+
 void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs)
 {
+/*
 	uint64_t params[] = {
 		[0] = regs->rdi,
 		[1] = regs->rsi,
@@ -117,6 +125,18 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 		[3] = regs->rcx,
 		[4] = regs->r8,
 		[5] = regs->r9,
+	};
+*/
+
+//	printf(">>>>>>>>%#llx<<<<<<<<<<\n", 	__ASSERTI(-1, ptrace(PTRACE_PEEKUSER, process, 8 * RBP, NULL), "ptrace"));
+//	printf("<<<<<<<<%#llx???????????\n", regs->rbp);
+	uint64_t params[] = {
+		[0] = regs->rbx,
+		[1] = regs->rcx,
+		[2] = regs->rdx,
+		[3] = regs->rsi,
+		[4] = regs->rdi,
+		[5] = regs->rbp,
 	};
 	char	line[128] = {0};
 	int			index = 0;
@@ -129,7 +149,7 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 		if (current.params_type[index] == INT) {
 			i += sprintf(line + i, "%d", (int)params[index]);
 		} else if (current.params_type[index] == STR) {
-			str = get_string(process, params[index]);	
+			str = get_string(process, params[index]);
 			i += sprintf(line + i, "\"%s\"", str);
 		} else if (current.params_type[index] == PTR) {
 			if (params[index] == 0) {
@@ -147,7 +167,12 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 			i += sprintf(line + i, ", ");
 	}
 	sprintf(line + i, ") = ");
-	printf("%s", line);
+	fprintf(stderr, "%s", line);
+}
+
+void	sys_execve_32(pid_t process, const struct syscall current, struct user_regs_struct *regs)
+{
+	fprintf(stderr, "strace: [ Process PID=%d runs in 32 bit mode. ]\n", process);
 }
 
 void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs)
@@ -156,13 +181,13 @@ void	sys_execve(pid_t process, const struct syscall current, struct user_regs_st
 	char			*param2;
 	unsigned int	param3;
 
-	printf("%s(", current.string);
+	fprintf(stderr, "%s(", current.string);
 	param1 = get_string(process, regs->rdi);
-	printf("\"%s\",", param1);
+	fprintf(stderr, "\"%s\",", param1);
 	param2 = display_env(process, regs->rsi);
-	printf(" [%s],", param2);
+	fprintf(stderr, " [%s],", param2);
 	param3 = count_elem(process, regs->rdx);
-	printf(" [/* %u vars */]) = ", param3);
+	fprintf(stderr, " [/* %u vars */]) = ", param3);
 }
 
 void	display_opt_c(struct info data[512])
@@ -218,16 +243,16 @@ int		handle_signal(pid_t process, int child_st)
 	int				signal = 0;
 	
 	if (WIFSIGNALED(child_st) && (signal = WTERMSIG(child_st)) != SIGTRAP) {
-		printf("<unfinished ...>\n+++ killed by %s +++\n", signal_macro[signal]);
+		fprintf(stderr, "<unfinished ...>\n+++ killed by %s +++\n", signal_macro[signal]);
 		fflush(stdout);
 		close(env.flag.fd);
 		kill(getpid(), signal);
 	}
 	if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
-		printf("--- %s", signal_macro[signal]);
+		fprintf(stderr, "--- %s", signal_macro[signal]);
 		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
 		if (!(env.flag.value & F_C))
-			printf(" {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%ld, si_stime=%ld} ---\n", \
+			fprintf(stderr, " {si_signo=%s, si_code=%d, si_pid=%d, si_uid=%d, si_status=%d, si_utime=%ld, si_stime=%ld} ---\n", \
 				signal_macro[info.si_signo], info.si_code, info.si_pid, info.si_uid, info.si_status, info.si_utime, info.si_stime);
 		if (signal != SIGCONT) {
 			__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, signal), "ptrace ");
@@ -237,7 +262,7 @@ int		handle_signal(pid_t process, int child_st)
 		}
 		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
 			init_sigaction(child_st);
-			printf("+++ killed by %s +++\n", signal_macro[signal]);
+			fprintf(stderr, "+++ killed by %s +++\n", signal_macro[signal]);
 			fflush(stdout);
 			close(env.flag.fd);
 			kill(getpid(), signal);
@@ -292,8 +317,10 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 		
 	ft_bzero(&bef, sizeof(bef));
 	ft_bzero(&aft, sizeof(aft));
-	syscalls[regs->orig_rax].f(process, syscalls[regs->orig_rax], regs);
-		
+	if (regs->orig_rax <= syscalls_32_value && syscalls[regs->orig_rax].string != NULL)
+		syscalls[regs->orig_rax].f(process, syscalls[regs->orig_rax], regs);
+	else
+		fprintf(stderr, "Unknown syscall() = ");
 	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 	gettimeofday(&bef, NULL);
 	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
@@ -307,14 +334,14 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 	__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, regs), "ptrace ");
 	if (syscalls[regs->orig_rax].return_type == INT) {
 		if ((int)regs->rax <= syscalls[regs->orig_rax].error) {
-	 		printf("-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
+	 		fprintf(stderr, "-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
 		} else {
-	 		printf("%lld\n", regs->rax);
+	 		fprintf(stderr, "%lld\n", regs->rax);
 		}
 	} else if (regs->rax != 0 && -regs->rax <= ERANGE) {
-		printf("-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
+		fprintf(stderr, "-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
 	} else {
-		printf("%#llx\n", regs->rax);
+		fprintf(stderr, "%#llx\n", regs->rax);
 	}
 	return (0);
 }
@@ -337,15 +364,21 @@ int	main(int argc, char **argv, char **environ)
 		__ASSERTI(-1, execve(bin, env.params, environ), "execve ");
 	} else {
 		struct user_regs_struct regs;
-
+		struct iovec x86_io = {
+			.iov_base = &regs,
+			.iov_len = sizeof(regs),
+		};
+	
 		waitpid(process, &child_st, WUNTRACED);
 		__ASSERTI(-1, ptrace(PTRACE_SEIZE, process, NULL, NULL), "ptrace ");
 		__ASSERTI(-1, ptrace(PTRACE_INTERRUPT, process, NULL, NULL), "ptrace ");
 		if (env.flag.value & F_OUTPUT)
-			__ASSERTI(-1, dup2(env.flag.fd, STDOUT_FILENO), "dup2");
+			__ASSERTI(-1, dup2(env.flag.fd, STDERR_FILENO), "dup2");
 		kill(process, SIGCONT);
-		waitpid(process, &child_st, WUNTRACED);
 		init_signal();
+		__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
+		waitpid(process, &child_st, WUNTRACED);
+		__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
 		t_bool status = SYSCALL_OFF;
 		while (1)
 		{
@@ -355,11 +388,19 @@ int	main(int argc, char **argv, char **environ)
 			__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
 			if (status == SYSCALL_ENTRY)
 				handle_signal(process, child_st);
+			__ASSERTI(-1, ptrace(PTRACE_GETREGSET, process, NT_PRSTATUS, &x86_io), "ptrace");
 			__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, &regs), "ptrace ");
-			if (status == SYSCALL_OFF && regs.orig_rax == SYS_execve) {
+			if (status == SYSCALL_OFF && regs.orig_rax == 59) {
 				status = SYSCALL_ENTRY;
 			}
 			if (status == SYSCALL_ENTRY) {
+	if (x86_io.iov_len == sizeof(struct user_regs_struct)) {
+		syscalls = syscalls_64;
+//		printf(">>>>>>>>>>>>>>> %u <<<<<<<<<<<<<<<<\n", x86_io.iov_len);
+	} else {
+		syscalls = syscalls_32;
+//		printf(">>>>>>>>>>>>>>> %u <<<<<<<<<<<<<<<<\n", x86_io.iov_len);
+	}
 				if (env.flag.value & F_C) {
 					if (store_syscall_data(process, &regs, &child_st, data) == END)
 						break ;
@@ -372,8 +413,8 @@ int	main(int argc, char **argv, char **environ)
 	if (env.flag.value & F_C) {
 		display_opt_c(data); //deplacer cette ligne en cas de SEGV / KILL etc...
 	} else {
-		printf("?\n");
-		printf("+++ exited with %d +++\n", WEXITSTATUS(child_st));
+		fprintf(stderr, "?\n");
+		fprintf(stderr, "+++ exited with %d +++\n", WEXITSTATUS(child_st));
 	}
 	close(env.flag.fd);
 	return (EXIT_SUCCESS);

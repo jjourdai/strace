@@ -23,7 +23,6 @@
 # include <sys/stat.h> 
 # include <sys/ptrace.h> 
 # include <sys/user.h> 
-# include <sys/syscall.h> 
 # include <sys/reg.h> 
 # include <linux/elf.h>
 # include <sys/uio.h>
@@ -135,6 +134,7 @@ char	*get_binary_path(char *dest);
 
 void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs);
+void	sys_execve_32(pid_t process, const struct syscall current, struct user_regs_struct *regs);
 
 /* signal.c */
 void	init_signal(void);
