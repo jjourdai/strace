@@ -23,7 +23,6 @@
 # include <sys/stat.h> 
 # include <sys/ptrace.h> 
 # include <sys/user.h> 
-# include <sys/reg.h> 
 # include <linux/elf.h>
 # include <sys/uio.h>
 # include <bits/uio-ext.h>
@@ -52,6 +51,9 @@
 # define SYSCALL_EXIT 0
 # define SYSCALL_OFF -1
 # define END 1
+
+# define X86_64 0
+# define I386 1
 
 enum	options {
 	F_HELP = (1 << 0),
@@ -83,13 +85,18 @@ struct syscall {
 	int		params_type[6];
 	int		return_type;
 	int		error;
-	void	(*f)(pid_t process, const struct syscall current, struct user_regs_struct *regs);
+	void	(*f)(pid_t process, const struct syscall current);
 };
 
 struct strace {
 	char	**params;
 	sigset_t	blockset;
 	sigset_t	emptyset;
+	const struct syscall	*syscalls;
+	uint32_t		max;
+	uint64_t		arg[6];
+	uint64_t		sys_nb;
+	uint8_t			arch;
 	struct {
 		uint8_t		value;
 		uint32_t	fd;
@@ -132,9 +139,9 @@ void	*x_void(void *err, void *res, char *str, char *file, int line);
 /* get_path.c */
 char	*get_binary_path(char *dest);
 
-void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs);
-void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs);
-void	sys_execve_32(pid_t process, const struct syscall current, struct user_regs_struct *regs);
+void	general(pid_t process, const struct syscall current);
+void	sys_execve(pid_t process, const struct syscall current);
+void	sys_execve_32(pid_t process, const struct syscall current);
 
 /* signal.c */
 void	init_signal(void);
@@ -142,5 +149,6 @@ void	init_sigaction(int signum);
 void	block_signal(sigset_t *blockSet);
 void	release_signal(sigset_t *empty_set);
 
+extern int asprintf(char **__restrict __ptr, const char *__restrict __fmt, ...);
 
 #endif

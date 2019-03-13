@@ -28,11 +28,12 @@ static char 	*local_binary(char *bin_name)
 	char	*concat;
 	struct stat buf_st;
 
-	getcwd(buf, PATH_MAX);	
+	__ASSERT(NULL, getcwd(buf, PATH_MAX),"getcwd");
 	asprintf(&concat, "%s/%s", buf, bin_name);
-	if (stat(concat, &buf_st) == -1)
-		return (NULL);
-	else
+	if (stat(concat, &buf_st) == -1) {
+		fprintf(stderr, RED_TEXT("%s: Command not found\n"), bin_name);
+		exit(EXIT_FAILURE);
+	} else
 		return (concat);
 }
 
@@ -53,8 +54,8 @@ static char	*search_binary_in_path(char *binary_name)
 		}
 		do
 		{
-			test = get_next_path(path);
-			sprintf(concat, "%s/%s", test, binary_name);
+			if ((test = get_next_path(path)) != NULL)
+				sprintf(concat, "%s/%s", test, binary_name);
 		} while (test != NULL && stat(concat, &buf));
 		if (test == NULL)
 			if ((concat = local_binary(binary_name)) != NULL)

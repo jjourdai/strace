@@ -52,7 +52,7 @@ inline void	release_signal(sigset_t *empty_set)
 
 void	signal_handler(int signum)
 {
-	
+	(void)signum;
 }
 
 inline void	init_sigaction(int signum)

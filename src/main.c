@@ -37,7 +37,9 @@ char	*espace_special_char(char *ptr)
 }
 */
 
-char *get_string(pid_t process, uint64_t reg)
+char *get_string(
+				pid_t process,
+				uint64_t reg)
 {
 	static char		loc_buf[PATH_MAX + 1];
 	struct iovec	remote;
@@ -54,7 +56,9 @@ char *get_string(pid_t process, uint64_t reg)
 	return (loc_buf);
 }
 
-uint32_t count_elem(pid_t process, uint64_t reg)
+uint32_t count_elem(
+				pid_t process,
+				uint64_t reg)
 {
 	uint32_t	value;
 	uint32_t	index = 0;
@@ -69,7 +73,9 @@ uint32_t count_elem(pid_t process, uint64_t reg)
 	return (index / 8);
 }
 
-char	 *display_env(pid_t process, uint64_t reg)
+char	 *display_env(
+				pid_t process,
+				uint64_t reg)
 {
 	uint32_t	index = 0;
 	char		*ptr;
@@ -104,63 +110,42 @@ char	 *display_env(pid_t process, uint64_t reg)
 	return (result);
 }
 
-struct syscall *syscalls;
 
 extern const struct syscall syscalls_32[];
 extern const uint32_t		syscalls_32_value;
 extern const struct syscall syscalls_64[];
 extern const uint32_t		syscalls_64_value;
+
 extern const char			*err_macro[];
 extern const char			*signal_macro[];
 
-#include <sys/reg.h>
-
-void	general(pid_t process, const struct syscall current, struct user_regs_struct *regs)
+void	general(
+				pid_t process,
+				const struct syscall current)
 {
-/*
-	uint64_t params[] = {
-		[0] = regs->rdi,
-		[1] = regs->rsi,
-		[2] = regs->rdx,
-		[3] = regs->rcx,
-		[4] = regs->r8,
-		[5] = regs->r9,
-	};
-*/
-
-//	printf(">>>>>>>>%#llx<<<<<<<<<<\n", 	__ASSERTI(-1, ptrace(PTRACE_PEEKUSER, process, 8 * RBP, NULL), "ptrace"));
-//	printf("<<<<<<<<%#llx???????????\n", regs->rbp);
-	uint64_t params[] = {
-		[0] = regs->rbx,
-		[1] = regs->rcx,
-		[2] = regs->rdx,
-		[3] = regs->rsi,
-		[4] = regs->rdi,
-		[5] = regs->rbp,
-	};
 	char	line[128] = {0};
 	int			index = 0;
 	uint64_t	i = 0;
 	char		*str;
-
+	
 	i += sprintf(line + i, "%s(", current.string);
 	while (index < current.params_number)
 	{
 		if (current.params_type[index] == INT) {
-			i += sprintf(line + i, "%d", (int)params[index]);
+			i += sprintf(line + i, "%d", (int)env.arg[index]);
 		} else if (current.params_type[index] == STR) {
-			str = get_string(process, params[index]);
+			str = get_string(process, env.arg[index]);
 			i += sprintf(line + i, "\"%s\"", str);
 		} else if (current.params_type[index] == PTR) {
-			if (params[index] == 0) {
+			if (env.arg[index] == 0) {
 				i += sprintf(line + i, "NULL");
 			} else {
-				i += sprintf(line + i, "%#llx", (unsigned long long)params[index]);
+				i += sprintf(line + i, "%#llx", (unsigned long long)env.arg[index]);
 			}
 		} else if (current.params_type[index] == LONG) {
-			i += sprintf(line + i, "%llu", (unsigned long long)params[index]);
+			i += sprintf(line + i, "%llu", (unsigned long long)env.arg[index]);
 		} else if (current.params_type[index] == SIG) {
-			i += sprintf(line + i, "%s", signal_macro[params[index]]); 
+			i += sprintf(line + i, "%s", signal_macro[env.arg[index]]); 
 		}
 		index++;
 		if (index < current.params_number)
@@ -170,27 +155,32 @@ void	general(pid_t process, const struct syscall current, struct user_regs_struc
 	fprintf(stderr, "%s", line);
 }
 
-void	sys_execve_32(pid_t process, const struct syscall current, struct user_regs_struct *regs)
+void	sys_execve_32(
+				pid_t process,
+				const struct syscall current)
 {
+	(void)current;
 	fprintf(stderr, "strace: [ Process PID=%d runs in 32 bit mode. ]\n", process);
 }
 
-void	sys_execve(pid_t process, const struct syscall current, struct user_regs_struct *regs)
+void	sys_execve(
+				pid_t process,
+				const struct syscall current)
 {
 	char			*param1;
 	char			*param2;
 	unsigned int	param3;
 
 	fprintf(stderr, "%s(", current.string);
-	param1 = get_string(process, regs->rdi);
+	param1 = get_string(process, env.arg[0]);
 	fprintf(stderr, "\"%s\",", param1);
-	param2 = display_env(process, regs->rsi);
+	param2 = display_env(process, env.arg[1]);
 	fprintf(stderr, " [%s],", param2);
-	param3 = count_elem(process, regs->rdx);
+	param3 = count_elem(process, env.arg[2]);
 	fprintf(stderr, " [/* %u vars */]) = ", param3);
 }
 
-void	display_opt_c(struct info data[512])
+void	display_data(struct info data_64[512])
 {
 	uint32_t i;
 	uint32_t errors = 0;
@@ -200,17 +190,17 @@ void	display_opt_c(struct info data[512])
 
 	/* Fill informations about performed syscall */
 	for (i = 0; i < 512; i++) {
-		if (data[i].calls > 0) {
-			calls += data[i].calls;
-			errors += data[i].errors;
-			seconds += (float)data[i].seconds / 1000000;
-			data[i].string = syscalls[i].string;
+		if (data_64[i].calls > 0) {
+			calls += data_64[i].calls;
+			errors += data_64[i].errors;
+			seconds += (float)data_64[i].seconds / 1000000;
+			data_64[i].string = env.syscalls[i].string;
 		}
 	}
 	for (i = 0; i < 512; i++) {
-		if (data[i].calls > 0) {
-			data[i].time = ((float)data[i].seconds / 1000000) / seconds * 100;
-			time += data[i].time;
+		if (data_64[i].calls > 0) {
+			data_64[i].time = ((float)data_64[i].seconds / 1000000) / seconds * 100;
+			time += data_64[i].time;
 		}
 	}
 	/* print in order */
@@ -222,9 +212,9 @@ void	display_opt_c(struct info data[512])
 	{	
 		max = 0;
 		for (i = 0; i < 512; i++) {
-			if (data[i].seconds > max) {
-				max = data[i].seconds;
-				ptr = &data[i];
+			if (data_64[i].seconds > max) {
+				max = data_64[i].seconds;
+				ptr = &data_64[i];
 			}
 		}
 		if (max > 0) {
@@ -235,9 +225,26 @@ void	display_opt_c(struct info data[512])
 	}
 	fprintf(stderr, "------ ----------- ----------- --------- --------- ----------------\n");
 	fprintf(stderr, "%.2f %11.6f             %9u %9u total\n", time, seconds, calls, errors);
+
 }
 
-int		handle_signal(pid_t process, int child_st)
+void	display_opt_c(
+				struct info data_64[512],
+				struct info data_32[512])
+{
+	env.syscalls = syscalls_64;
+	display_data(data_64);
+	if (env.arch == I386) {
+		env.syscalls = syscalls_32;
+		fprintf(stderr, "System call usage summary for 32 bit mode:\n");
+		display_data(data_32);
+	}
+		
+}
+
+int		handle_signal(
+				pid_t process,
+				int child_st)
 {
 	siginfo_t		info;
 	int				signal = 0;
@@ -272,27 +279,34 @@ int		handle_signal(pid_t process, int child_st)
 	return (0);
 }
 
-uint64_t	handle_timer(const struct timeval *now, const struct timeval *past)
+uint64_t	handle_timer(
+				const struct timeval *now,
+				const struct timeval *past)
 {
 	uint64_t time = ((now->tv_sec) << 20) | (now->tv_usec);
 	uint64_t time2 = ((past->tv_sec) << 20) | (past->tv_usec);
 	return time - time2;
 }
 
-int		store_syscall_data(pid_t process, struct user_regs_struct *regs, int *child_st, struct info data[512])
+int		store_syscall_data(
+				pid_t process,
+				struct user_regs_struct *regs,
+				int *child_st,
+				struct info data[512])
 {
 	struct timeval bef;
 	struct timeval aft;
+	const struct syscall *syscalls = env.syscalls;
 		
 	ft_bzero(&bef, sizeof(bef));
 	ft_bzero(&aft, sizeof(aft));
 	data[regs->orig_rax].calls++;
 		
 	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
-	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
 	gettimeofday(&bef, NULL);
-	waitpid(-1, child_st, WUNTRACED);
+	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
 	gettimeofday(&aft, NULL);
+	waitpid(-1, child_st, WUNTRACED);
 	data[regs->orig_rax].seconds += handle_timer(&aft, &bef);
 	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
 	if (handle_signal(process, *child_st) == 1)
@@ -310,21 +324,22 @@ int		store_syscall_data(pid_t process, struct user_regs_struct *regs, int *child
 	return (0);
 }
 
-int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st)
+int		display_syscall(
+				pid_t process,
+				int *child_st,
+				struct user_regs_struct *regs)
 {
 	struct timeval bef;
 	struct timeval aft;
-		
+
 	ft_bzero(&bef, sizeof(bef));
 	ft_bzero(&aft, sizeof(aft));
-	if (regs->orig_rax <= syscalls_32_value && syscalls[regs->orig_rax].string != NULL)
-		syscalls[regs->orig_rax].f(process, syscalls[regs->orig_rax], regs);
+	if (env.sys_nb <= env.max && env.syscalls[env.sys_nb].string != NULL)
+		env.syscalls[env.sys_nb].f(process, env.syscalls[env.sys_nb]);
 	else
 		fprintf(stderr, "Unknown syscall() = ");
 	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
-	gettimeofday(&bef, NULL);
 	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
-	gettimeofday(&aft, NULL);
 	waitpid(-1, child_st, WUNTRACED);
 	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
 	if (handle_signal(process, *child_st) == 1)
@@ -332,8 +347,8 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 	if (WIFEXITED(*child_st))
 		return (END);
 	__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, regs), "ptrace ");
-	if (syscalls[regs->orig_rax].return_type == INT) {
-		if ((int)regs->rax <= syscalls[regs->orig_rax].error) {
+	if (env.syscalls[env.sys_nb].return_type == INT) {
+		if ((int)regs->rax <= env.syscalls[env.sys_nb].error) {
 	 		fprintf(stderr, "-1 %s (%s)\n", err_macro[-regs->rax], strerror(-regs->rax));
 		} else {
 	 		fprintf(stderr, "%lld\n", regs->rax);
@@ -346,14 +361,45 @@ int		display_syscall(pid_t process, struct user_regs_struct *regs, int *child_st
 	return (0);
 }
 
+void	init_syscall_reg(
+				struct user_regs_struct *regs,
+				struct iovec *x86_io)
+{
+	if (x86_io->iov_len == sizeof(struct user_regs_struct)) {
+		env.syscalls = (struct syscall*)&syscalls_64;
+		env.max = syscalls_64_value;
+		env.arg[0] = regs->rdi;
+		env.arg[1] = regs->rsi;
+		env.arg[2] = regs->rdx;
+		env.arg[3] = regs->rcx;
+		env.arg[4] = regs->r8;
+		env.arg[5] = regs->r9;
+		env.arch = X86_64;
+	} else {
+		env.syscalls = (struct syscall*)&syscalls_32;
+		env.max = syscalls_32_value;
+		env.arg[0] = regs->rbx;
+		env.arg[1] = regs->rcx;
+		env.arg[2] = regs->rdx;
+		env.arg[3] = regs->rsi;
+		env.arg[4] = regs->rdi;
+		env.arg[5] = regs->rbp;
+		env.arch = I386;
+	}
+	env.sys_nb = regs->orig_rax;
+}
+
 int	main(int argc, char **argv, char **environ)
 {
 	get_options(argc, argv);
 	pid_t	process;
 	int		child_st = 0;
-	static struct info data[512];
+	struct info data_64[512];
+	struct info data_32[512];
 
-	bzero(data, sizeof(data));
+	bzero(data_64, sizeof(data_64));
+	bzero(data_32, sizeof(data_32));
+
 	release_signal(&env.emptyset);
 	block_signal(&env.blockset);
 
@@ -390,28 +436,22 @@ int	main(int argc, char **argv, char **environ)
 				handle_signal(process, child_st);
 			__ASSERTI(-1, ptrace(PTRACE_GETREGSET, process, NT_PRSTATUS, &x86_io), "ptrace");
 			__ASSERTI(-1, ptrace(PTRACE_GETREGS, process, NULL, &regs), "ptrace ");
-			if (status == SYSCALL_OFF && regs.orig_rax == 59) {
+			if (status == SYSCALL_OFF && regs.orig_rax == 59) { //syscall_number_execve_64bits
 				status = SYSCALL_ENTRY;
 			}
+			init_syscall_reg(&regs, &x86_io);
 			if (status == SYSCALL_ENTRY) {
-	if (x86_io.iov_len == sizeof(struct user_regs_struct)) {
-		syscalls = syscalls_64;
-//		printf(">>>>>>>>>>>>>>> %u <<<<<<<<<<<<<<<<\n", x86_io.iov_len);
-	} else {
-		syscalls = syscalls_32;
-//		printf(">>>>>>>>>>>>>>> %u <<<<<<<<<<<<<<<<\n", x86_io.iov_len);
-	}
 				if (env.flag.value & F_C) {
-					if (store_syscall_data(process, &regs, &child_st, data) == END)
+					if (store_syscall_data(process, &regs, &child_st, (env.arch == X86_64) ? data_64 : data_32) == END)
 						break ;
 				}
-				else if (display_syscall(process, &regs, &child_st) == END)
+				else if (display_syscall(process, &child_st, &regs) == END)
 					break ;
 			}
 		}
 	}
 	if (env.flag.value & F_C) {
-		display_opt_c(data); //deplacer cette ligne en cas de SEGV / KILL etc...
+		display_opt_c(data_64, data_32); //deplacer cette ligne en cas de SEGV / KILL etc...
 	} else {
 		fprintf(stderr, "?\n");
 		fprintf(stderr, "+++ exited with %d +++\n", WEXITSTATUS(child_st));

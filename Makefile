@@ -34,7 +34,7 @@ NAME = ft_strace
 CC = gcc
 
 #CFLAGS = -Wall -Wextra -fsanitize=address -g -fno-omit-frame-pointer
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra -O2
 
 OBJ_NAME = $(SRC_NAME:.c=.o)
 

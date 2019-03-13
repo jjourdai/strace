@@ -1,0 +1,68 @@
+execve("/root/strace/bin_test/test2_32", ["bin_test/test2_32"], [/* 21 vars */]) = 0
+brk(NULL) = 0x568ab000
+access("/etc/ld.so.nohwcap", 0) = -1 ENOENT (No such file or directory)
+mmap2(NULL, 8192, 3, 34, -1, 0) = 0xf7f51000
+access("/etc/ld.so.preload", 4) = -1 ENOENT (No such file or directory)
+openat(-100, "/etc/ld.so.cache", 524288, 0) = 4
+fstat(4, 0xffcdbb10) = 0
+mmap2(NULL, 34196, 1, 2, 4, 0) = 0xf7f48000
+close(4) = 0
+access("/etc/ld.so.nohwcap", 0) = -1 ENOENT (No such file or directory)
+openat(-100, "/lib32/libc.so.6", 524288, 0) = 4
+read(4, "", 512) = 512
+fstat(4, 0xffcdbb70) = 0
+mmap2(NULL, 1935900, 5, 2050, 4, 0) = 0xf7d6f000
+mprotect(0xf7f41000, 4096, 0) = 0
+mmap2(0xf7f42000, 12288, 3, 2066, 4, 466) = 0xf7f42000
+mmap2(0xf7f45000, 10780, 3, 50, -1, 0) = 0xf7f45000
+close(4) = 0
+Unknown syscall() = 0
+mprotect(0xf7f42000, 8192, 1) = 0
+mprotect(0x565fc000, 4096, 1) = 0
+mprotect(0xf7f7e000, 4096, 1) = 0
+munmap(0xf7f48000, 34196) = 0
+rt_sigaction(SIGINT, 0xffcdbbc4, 0xffcdbc50) = 0
+read(0, "Õ", 1024) = -1 (null) (Unknown error 512)
+--- SIGINT {si_signo=SIGINT, si_code=128, si_pid=0, si_uid=0, si_status=-1679462148, si_utime=139638818813244, si_stime=2840782523283070720} ---
+write(2, "xyzzy
+", 6) = 6
+Unknown syscall() = 0x3
+read(0, "Õ", 1024) = -1 (null) (Unknown error 512)
+--- SIGINT {si_signo=SIGINT, si_code=128, si_pid=0, si_uid=0, si_status=512, si_utime=139638818813244, si_stime=2840782523283070720} ---
+write(2, "xyzzy
+", 6) = 6
+Unknown syscall() = 0x3
+read(0, "Õ", 1024) = -1 (null) (Unknown error 512)
+--- SIGINT {si_signo=SIGINT, si_code=128, si_pid=0, si_uid=0, si_status=512, si_utime=139638818813244, si_stime=2840782523283070720} ---
+write(2, "xyzzy
+", 6) = 6
+Unknown syscall() = 0x3
+read(0, "Õ", 1024) = -1 (null) (Unknown error 512)
+--- SIGINT {si_signo=SIGINT, si_code=128, si_pid=0, si_uid=0, si_status=512, si_utime=139638818813244, si_stime=2840782523283070720} ---
+write(2, "xyzzy
+", 6) = 6
+Unknown syscall() = 0x3
+read(0, "Õ", 1024) = -1 (null) (Unknown error 512)
+--- SIGINT {si_signo=SIGINT, si_code=128, si_pid=0, si_uid=0, si_status=512, si_utime=139638818813244, si_stime=2840782523283070720} ---
+write(2, "xyzzy
+", 6) = 6
+Unknown syscall() = 0x3
+read(0, "Õ", 1024) = -1 (null) (Unknown error 512)
+--- SIGINT {si_signo=SIGINT, si_code=128, si_pid=0, si_uid=0, si_status=512, si_utime=139638818813244, si_stime=2840782523283070720} ---
+write(2, "xyzzy
+", 6) = 6
+Unknown syscall() = 0x3
+read(0, "Õ", 1024) = 1
+fstat(1, 0xffcdb7ec) = 0
+brk(NULL) = 0x568ab000
+brk(0x568cc000) = 0x568cc000
+brk(0x568cd000) = 0x568cd000
+write(1, "-=-------==============
+", 24) = 24
+write(1, "-=-=-============
+=====
+", 18) = 18
+write(2, "qwerty
+", 7) = 7
+exit_group(0) = ?
++++ exited with 0 +++
