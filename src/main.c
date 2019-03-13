@@ -246,6 +246,13 @@ int		handle_signal(
 	siginfo_t		info;
 	int				signal = 0;
 
+	if (WIFSIGNALED(child_st) && (signal = WTERMSIG(child_st))) {
+			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
+			fprintf(stderr, "\n+++ killed by %s +++\n", signal_macro[signal]);
+			fflush(stdout);
+			close(env.flag.fd);
+			kill(getpid(), signal);
+	}
 	if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
 		fprintf(stderr, "--- %s", signal_macro[signal]);
 		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);

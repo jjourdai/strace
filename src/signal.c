@@ -56,7 +56,7 @@ void	signal_handler(int signum, siginfo_t *info, void *old)
 		kill(env.proc, SIGCONT);
 		kill(env.proc, SIGINT);
 		__ASSERTI(-1, ptrace(PTRACE_DETACH, env.proc, NULL, NULL), "ptrace");
-		fprintf(stderr, ") = ? ERESTARTSYS (To be restarted if SA_RESTART is set)\nstrace: Process %u detached \n", env.proc);
+		fprintf(stderr, "strace: Process %u detached \n", env.proc);
 		exit(EXIT_SUCCESS);
 	}
 }
@@ -87,3 +87,5 @@ inline void	init_signal(void)
 	sigaction(SIGPIPE, &sa, NULL);
 	sigaction(SIGTERM, &sa, NULL);
 }
+
+
