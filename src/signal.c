@@ -50,9 +50,15 @@ inline void	release_signal(sigset_t *empty_set)
 	sigemptyset(empty_set);
 }
 
-void	signal_handler(int signum)
+void	signal_handler(int signum, siginfo_t *info, void *old)
 {
-	(void)signum;
+	if (signum == SIGINT) {
+		kill(env.proc, SIGCONT);
+		kill(env.proc, SIGINT);
+		__ASSERTI(-1, ptrace(PTRACE_DETACH, env.proc, NULL, NULL), "ptrace");
+		fprintf(stderr, ") = ? ERESTARTSYS (To be restarted if SA_RESTART is set)\nstrace: Process %u detached \n", env.proc);
+		exit(EXIT_SUCCESS);
+	}
 }
 
 inline void	init_sigaction(int signum)
@@ -73,8 +79,8 @@ inline void	init_signal(void)
 
 	sigaction(SIGTTOU, &sa, NULL);
 	sigaction(SIGTTIN, &sa, NULL);
-	sa.sa_sigaction = NULL;
-	sa.sa_handler = signal_handler;
+	sa.sa_sigaction = signal_handler;
+	sa.sa_flags = SA_SIGINFO;
 	sigaction(SIGHUP, &sa, NULL);
 	sigaction(SIGINT, &sa, NULL);
 	sigaction(SIGQUIT, &sa, NULL);

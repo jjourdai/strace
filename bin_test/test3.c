@@ -13,7 +13,8 @@ main(int argc, char *argv[])
 	char *c;
 	int fd;
 
-	fd = open("/tmp/delme", O_RDWR);
+//	fd = open("/tmp/delme", O_RDWR);
+	fd = open("/tmp/delmen", O_RDWR);
 	c = mmap(0, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	*c = 0;
 	if (fork()) {

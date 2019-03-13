@@ -110,7 +110,6 @@ char	 *display_env(
 	return (result);
 }
 
-
 extern const struct syscall syscalls_32[];
 extern const uint32_t		syscalls_32_value;
 extern const struct syscall syscalls_64[];
@@ -151,7 +150,6 @@ void	general(
 		if (index < current.params_number)
 			i += sprintf(line + i, ", ");
 	}
-	sprintf(line + i, ") = ");
 	fprintf(stderr, "%s", line);
 }
 
@@ -239,7 +237,6 @@ void	display_opt_c(
 		fprintf(stderr, "System call usage summary for 32 bit mode:\n");
 		display_data(data_32);
 	}
-		
 }
 
 int		handle_signal(
@@ -248,13 +245,7 @@ int		handle_signal(
 {
 	siginfo_t		info;
 	int				signal = 0;
-	
-	if (WIFSIGNALED(child_st) && (signal = WTERMSIG(child_st)) != SIGTRAP) {
-		fprintf(stderr, "<unfinished ...>\n+++ killed by %s +++\n", signal_macro[signal]);
-		fflush(stdout);
-		close(env.flag.fd);
-		kill(getpid(), signal);
-	}
+
 	if (WIFSTOPPED(child_st) && (signal = WSTOPSIG(child_st)) != SIGTRAP) {
 		fprintf(stderr, "--- %s", signal_macro[signal]);
 		ptrace(PTRACE_GETSIGINFO, process, NULL, &info);
@@ -266,9 +257,10 @@ int		handle_signal(
 			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 			waitpid(-1, &child_st, WUNTRACED);
 			__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
+			init_sigaction(signal);
 		}
-		if (signal == SIGSEGV || signal == SIGKILL || signal == SIGABRT) {
-			init_sigaction(child_st);
+		if (WIFSIGNALED(child_st)) {
+			__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 			fprintf(stderr, "+++ killed by %s +++\n", signal_macro[signal]);
 			fflush(stdout);
 			close(env.flag.fd);
@@ -338,10 +330,11 @@ int		display_syscall(
 		env.syscalls[env.sys_nb].f(process, env.syscalls[env.sys_nb]);
 	else
 		fprintf(stderr, "Unknown syscall() = ");
-	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 	__ASSERTI(-1, ptrace(PTRACE_SYSCALL, process, NULL, NULL), "ptrace ");
+	__ASSERTI(-1, sigprocmask(SIG_SETMASK, &env.emptyset, NULL), "Sigprogmask");
 	waitpid(-1, child_st, WUNTRACED);
 	__ASSERTI(-1, sigprocmask(SIG_BLOCK, &env.blockset, NULL), "Sigprogmask");
+	fprintf(stderr, ") = ");
 	if (handle_signal(process, *child_st) == 1)
 		return (0);
 	if (WIFEXITED(*child_st))
@@ -409,6 +402,7 @@ int	main(int argc, char **argv, char **environ)
 		kill(getpid(), SIGSTOP);
 		__ASSERTI(-1, execve(bin, env.params, environ), "execve ");
 	} else {
+		env.proc = process;
 		struct user_regs_struct regs;
 		struct iovec x86_io = {
 			.iov_base = &regs,

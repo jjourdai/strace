@@ -42,7 +42,7 @@
 # define DUP_ON 1
 # define DUP_OFF 0
 
-# define DEBUG 1
+# define DEBUG 0
 # define __FATAL(X, ...) handle_error(__LINE__, __FILE__, FATAL, X, __VA_ARGS__)
 # define __ASSERTI(ERR_VALUE, RETURN_VALUE, STRING) x_int(ERR_VALUE, RETURN_VALUE, STRING, __FILE__, __LINE__)
 # define __ASSERT(ERR_VALUE, RETURN_VALUE, STRING) x_void(ERR_VALUE, RETURN_VALUE, STRING, __FILE__, __LINE__)
@@ -97,6 +97,7 @@ struct strace {
 	uint64_t		arg[6];
 	uint64_t		sys_nb;
 	uint8_t			arch;
+	pid_t			proc;
 	struct {
 		uint8_t		value;
 		uint32_t	fd;
